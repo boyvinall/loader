@@ -31,10 +31,6 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 		return Config{}, fmt.Errorf("command is required")
 	}
 
-	rate := cmd.Duration("rate")
-	if rate <= 0 {
-		return Config{}, fmt.Errorf("--rate must be greater than 0")
-	}
 	maxParallel := int(cmd.Int("max-parallel"))
 	if maxParallel <= 0 {
 		return Config{}, fmt.Errorf("--max-parallel must be greater than 0")
@@ -42,7 +38,7 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 
 	return Config{
 		Args:         args,
-		Rate:         rate,
+		Rate:         cmd.Duration("rate"),
 		MaxParallel:  maxParallel,
 		MaxCount:     int(cmd.Int("max-count")),
 		TestDuration: cmd.Duration("duration"),

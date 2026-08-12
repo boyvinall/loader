@@ -7,6 +7,11 @@ live process output, latency stats, and a recent-activity feed). When stdout/std
 terminal — piped, redirected to a file, or run in CI — it automatically falls back to the
 plain-text output described below, so scripting and log capture keep working unchanged.
 
+Note that this is deliberately barebones but easy to run for simple CLI tools.  If you want
+something that can ramp up requests slowly, handle super-high load and back-off when it starts
+getting errors, then this likely isn't the tool for you.  But if you want to run some simple
+script in parallel a few times then perhaps it could help.
+
 ![loader demo](demo.gif)
 
 ## Install
