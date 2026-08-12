@@ -2,6 +2,13 @@
 
 A minimal CLI load-testing tool that runs a command repeatedly in parallel and reports timing statistics.
 
+When run in an interactive terminal, `loader` shows a fullscreen dashboard (status/config,
+live process output, latency stats, and a recent-activity feed). When stdout/stderr isn't a
+terminal — piped, redirected to a file, or run in CI — it automatically falls back to the
+plain-text output described below, so scripting and log capture keep working unchanged.
+
+![loader demo](demo.gif)
+
 ## Install
 
 ```sh
@@ -28,7 +35,8 @@ loader [options] COMMAND [ARGS...]
 | `--max-parallel` | `-p` | `20` | Maximum number of simultaneous processes |
 | `--max-count` | `-n` | `0` | Total processes to launch before stopping (0 = unlimited) |
 | `--duration` | `-d` | `0` | Stop launching after this duration (0 = unlimited) |
-| `--verbose` | | off | Show stdout/stderr from each process |
+| `--verbose` | | off | Show stdout/stderr from each process (non-TUI mode) |
+| `--no-tui` | | off | Force plain-text output instead of the fullscreen TUI |
 
 At least one of `--max-count` or `--duration` must be set, otherwise the tool runs until interrupted.
 
@@ -56,9 +64,20 @@ loader -d 60s -r 0s -p 100 curl -s http://localhost:8080/health
 
 - A new process is launched on every `--rate` tick. If all `--max-parallel` slots are occupied the launch loop blocks until one frees up.
 - When `--duration` expires, no new processes are launched but any already-running processes are allowed to finish.
-- **Ctrl-C once** — stops launching new processes, waits for running ones to finish.
-- **Ctrl-C twice** — sends SIGKILL to all running processes and exits immediately.
+- **Ctrl-C once** (or `q`) — stops launching new processes, waits for running ones to finish.
+- **Ctrl-C twice** (or `q` twice) — kills all running processes and finishes immediately.
 - Subprocess stdout/stderr is discarded by default; use `--verbose` to see it.
+
+## Interactive mode
+
+In a terminal, `loader` runs as a fullscreen dashboard with:
+
+- a **status panel** — command, config, run stage, elapsed time, launched/running/completed/failed counts, and a progress bar toward `--max-count`/`--duration` when either is set;
+- a **log panel** — streamed subprocess output (always shown, regardless of `--verbose`) and process errors, scrollable with the arrow keys, `pgup`/`pgdn`, or `end`/`G` to jump back to the tail;
+- a **latency panel** — live min/avg/p50/p95/p99/max, updated as processes complete;
+- a **recent activity panel** — a rolling feed showing each process the moment it starts (`RUN`) and again once it completes (`OK`/`FAIL`, with duration).
+
+Once the run finishes, the dashboard stays open showing the final results — press any key to exit.
 
 ## Output
 
