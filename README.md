@@ -50,7 +50,7 @@ At least one of `--max-count` or `--duration` must be set, otherwise the tool ru
 Launch `curl` 100 times, at most 10 in parallel, one per second:
 
 ```sh
-loader -n 100 -p 10 curl -s https://example.com
+loader -n 100 -p 10 -- curl -s https://example.com
 ```
 
 Run for 30 seconds at 5 launches per second, capped at 50 parallel:
@@ -62,7 +62,7 @@ loader -d 30s -r 200ms -p 50 ./my-script.sh
 Stress test a local server with no rate limit between launches:
 
 ```sh
-loader -d 60s -r 0s -p 100 curl -s http://localhost:8080/health
+loader -d 60s -r 0s -p 100 -- curl -s http://localhost:8080/health
 ```
 
 ## Behaviour
