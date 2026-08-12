@@ -1,4 +1,4 @@
-.PHONY: help all build install lint lint-go test tidy
+.PHONY: help all build install lint lint-go test tidy demo
 
 #: lint, test, and build (default)
 all: lint test tidy build
@@ -34,12 +34,19 @@ lint-go:
 #: run all tests
 test:
 	$(call PROMPT, $@)
-	go test ./...
+	go test -race ./...
 
 #: tidy go.mod and go.sum
 tidy:
 	$(call PROMPT, $@)
 	go mod tidy
+
+#: run the demo tape to create the gif
+demo: demo.gif
+
+demo.gif: demo.tape build
+	$(call PROMPT, $@)
+	PS1="$$ " vhs $<
 
 #: print Makefile targets and short descriptions
 help:
