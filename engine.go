@@ -598,7 +598,7 @@ func (e *Engine) Run() {
 	sem := make(chan struct{}, e.cfg.MaxParallel)
 	var wg sync.WaitGroup
 
-	ticker := time.NewTicker(e.cfg.Rate)
+	ticker := time.NewTicker(max(e.cfg.Rate, 1))
 	defer ticker.Stop()
 
 launchLoop:
