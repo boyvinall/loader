@@ -131,10 +131,14 @@ type Model struct {
 	runningOuterHeight int
 	logPanelHeight     int
 
-	viewport   viewport.Model
-	progress   progress.Model
-	followTail bool
-	logLines   []string
+	viewport    viewport.Model
+	progress    progress.Model
+	followTail  bool
+	rawLogLines []LogLine
+
+	filterEditing bool
+	filterInput   string
+	filter        string // lowercased; empty means no filter
 
 	snap Snapshot
 }
@@ -181,16 +185,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, statusTickCmd()
 
 	case logBatchMsg:
-		for _, l := range msg {
-			m.logLines = append(m.logLines, formatLogLine(l))
+		m.rawLogLines = append(m.rawLogLines, msg...)
+		if len(m.rawLogLines) > logLineCap {
+			m.rawLogLines = m.rawLogLines[len(m.rawLogLines)-logLineCap:]
 		}
-		if len(m.logLines) > logLineCap {
-			m.logLines = m.logLines[len(m.logLines)-logLineCap:]
-		}
-		m.viewport.SetContent(strings.Join(m.logLines, "\n"))
-		if m.followTail {
-			m.viewport.GotoBottom()
-		}
+		m.refreshLogViewport()
 		return m, waitForLogLines(m.eng)
 
 	case logChClosedMsg:
@@ -204,7 +203,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// refreshLogViewport rebuilds the log panel's content from rawLogLines,
+// applying the active filter (a case-insensitive substring match against
+// each line's text). Called whenever new log lines arrive or the filter
+// changes.
+func (m *Model) refreshLogViewport() {
+	lines := make([]string, 0, len(m.rawLogLines))
+	for _, l := range m.rawLogLines {
+		// formatLogLine wraps the whole "[procID] text" string in one ANSI
+		// style, so the escape codes sit only at either end and a plain
+		// substring match (e.g. "[5]") still finds the prefix intact.
+		formatted := formatLogLine(l)
+		if m.filter != "" && !strings.Contains(strings.ToLower(formatted), m.filter) {
+			continue
+		}
+		lines = append(lines, formatted)
+	}
+	m.viewport.SetContent(strings.Join(lines, "\n"))
+	if m.followTail {
+		m.viewport.GotoBottom()
+	}
+}
+
+// handleFilterKey handles keystrokes while the log filter input is active
+// (entered via "/"), editing filterInput without touching the viewport.
+func (m Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		m.filterEditing = false
+		m.filter = strings.ToLower(m.filterInput)
+		m.refreshLogViewport()
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.filterEditing = false
+		m.filterInput = ""
+	case tea.KeyBackspace:
+		if r := []rune(m.filterInput); len(r) > 0 {
+			m.filterInput = string(r[:len(r)-1])
+		}
+	case tea.KeyRunes, tea.KeySpace:
+		m.filterInput += msg.String()
+	}
+	return m, nil
+}
+
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.filterEditing {
+		return m.handleFilterKey(msg)
+	}
+	if msg.String() == "/" {
+		m.filterEditing = true
+		m.filterInput = m.filter
+		return m, nil
+	}
+
 	// Once finished, q or ctrl+c exits.
 	if m.eng.Stage() == StageFinished {
 		switch msg.String() {
@@ -538,8 +589,11 @@ func (m Model) renderRunningPanel() string {
 
 func (m Model) renderLogPanel() string {
 	title := "Log Output"
+	if m.filter != "" {
+		title = fmt.Sprintf("Log Output (filter: %q)", m.filter)
+	}
 	if m.snap.DroppedLogLines > 0 {
-		title = fmt.Sprintf("Log Output (%d dropped)", m.snap.DroppedLogLines)
+		title = fmt.Sprintf("%s (%d dropped)", title, m.snap.DroppedLogLines)
 	}
 	return renderPanel(title, m.logWidth, m.logPanelHeight, m.viewport.View())
 }
@@ -627,16 +681,20 @@ func (m Model) renderActivityPanel() string {
 }
 
 func (m Model) renderFooter() string {
+	if m.filterEditing {
+		return styleFooter.Width(m.width).Render("filter log: /" + m.filterInput + "█  •  enter: apply  esc: cancel")
+	}
+
 	var hint string
 	switch m.eng.Stage() {
 	case StageRunning:
-		hint = "ctrl+c/q: stop launching  •  ↑/↓ pgup/pgdn: scroll log  •  end/G: jump to tail"
+		hint = "ctrl+c/q: stop launching  •  ↑/↓ pgup/pgdn: scroll log  •  end/G: jump to tail  •  /: filter log"
 	case StageStopping:
 		hint = "waiting for running processes to finish  •  ctrl+c/q: kill now"
 	case StageKilling:
 		hint = "killing running processes…  •  ctrl+c/q: force quit"
 	case StageFinished:
-		hint = "finished — q: exit  •  ↑/↓ pgup/pgdn: scroll log"
+		hint = "finished — q: exit  •  ↑/↓ pgup/pgdn: scroll log  •  /: filter log"
 	}
 	return styleFooter.Width(m.width).Render(hint)
 }
