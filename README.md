@@ -78,7 +78,7 @@ loader -d 60s -r 0s -p 100 -- curl -s http://localhost:8080/health
 In a terminal, `loader` runs as a fullscreen dashboard with:
 
 - a **status panel** — command, config, run stage, elapsed time, launched/running/completed/failed counts, and a progress bar toward `--max-count`/`--duration` when either is set;
-- a **log panel** — streamed subprocess output (always shown, regardless of `--verbose`) and process errors, scrollable with the arrow keys, `pgup`/`pgdn`, or `end`/`G` to jump back to the tail;
+- a **log panel** — streamed subprocess output (always shown, regardless of `--verbose`) and process errors, scrollable with the arrow keys, `pgup`/`pgdn`, or `end`/`G` to jump back to the tail; press `/` to filter it by a case-insensitive substring match (`enter` to apply, `esc` to cancel);
 - a **latency panel** — live min/avg/p50/p95/p99/max, updated as processes complete;
 - a **recent activity panel** — a rolling feed showing each process the moment it starts (`RUN`) and again once it completes (`OK`/`FAIL`, with duration).
 
