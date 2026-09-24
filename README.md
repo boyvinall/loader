@@ -72,6 +72,10 @@ loader -d 60s -r 0s -p 100 -- curl -s http://localhost:8080/health
 - **Ctrl-C once** (or `q`) — stops launching new processes, waits for running ones to finish.
 - **Ctrl-C twice** (or `q` twice) — kills all running processes and finishes immediately.
 - Subprocess stdout/stderr is discarded by default; use `--verbose` to see it.
+- Each launched process inherits the environment plus:
+  - `LOADER_ITERATION_ID` — the 0-based launch counter for this process
+  - `LOADER_RATE` — the configured `--rate` value
+  - `LOADER_MAX_PARALLEL` — the configured `--max-parallel` value
 
 ## Interactive mode
 

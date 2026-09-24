@@ -657,6 +657,11 @@ func (e *Engine) launchOne(n int64) {
 		return syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
 	}
 	c.WaitDelay = 5 * time.Second
+	c.Env = append(os.Environ(),
+		fmt.Sprintf("LOADER_ITERATION_ID=%d", n),
+		fmt.Sprintf("LOADER_RATE=%s", e.cfg.Rate),
+		fmt.Sprintf("LOADER_MAX_PARALLEL=%d", e.cfg.MaxParallel),
+	)
 
 	var stdoutW, stderrW *lineWriter
 	switch e.cfg.OutputMode {
