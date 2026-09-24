@@ -48,7 +48,18 @@ Three files split cleanly along "engine vs. two interchangeable front-ends":
   something looks off after a resize.
 - **[main.go](main.go)** — CLI flag definitions (`urfave/cli/v3`) and the interactive/plain
   dispatch: `isInteractiveTerminal()` checks stdout *and* stderr are TTYs, `--no-tui` forces
-  plain mode even in a terminal.
+  plain mode even in a terminal. `resolveLogDir()` turns `--log-dir`/`LOADER_LOG_DIR` (or the
+  `.loader` default) into a fresh timestamped subfolder per run (UTC, colon-free so it's valid
+  on filesystems like NTFS — see `logDirTimeFormat`); `--no-log` leaves
+  `Config.LogDir` empty to disable logging entirely.
+- **[logdir.go](logdir.go)** — `RunLogger`, the optional on-disk logger for a single run's log
+  artifacts: `environment.log` (the environment loader saw at startup), one `proc-N.log` per
+  launched process (combined stdout/stderr, matched by `LOADER_RUN_ATTEMPT`), `run.log` (one
+  timestamped start/stop line per launch, written by `LogStart`/`LogStop` from `launchOne` and
+  mirroring the TUI's recent-activity feed), and `summary.log` (config + final stats, written
+  once by `Engine.Run` after `FinalSnapshot()`, which also closes the run log). A nil
+  `*RunLogger` is a safe no-op, so `Engine` doesn't need a separate enabled/disabled branch.
+  `FormatConfig()` here is shared by `plain.go`'s startup header and `summary.log`.
 
 Both drivers talk to `Engine` through the same public surface (`Run`, `Snapshot`,
 `FinalSnapshot`, `LogLines`, `StopLaunching`, `KillRunning`, `Stopping`, `Finished`) — there is

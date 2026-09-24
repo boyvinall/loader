@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 )
 
@@ -13,16 +12,14 @@ import (
 // second, error lines printed as they occur, and a final summary. Used when
 // stdout/stderr isn't an interactive terminal.
 func runPlain(cfg Config) error {
-	eng := NewEngine(cfg)
-
-	fmt.Fprintf(os.Stderr, "command:      %s\n", strings.Join(cfg.Args, " "))
-	fmt.Fprintf(os.Stderr, "rate:         %v\n", cfg.Rate)
-	fmt.Fprintf(os.Stderr, "max-parallel: %d\n", cfg.MaxParallel)
-	if cfg.MaxCount > 0 {
-		fmt.Fprintf(os.Stderr, "max-count:    %d\n", cfg.MaxCount)
+	eng, err := NewEngine(cfg)
+	if err != nil {
+		return err
 	}
-	if cfg.TestDuration > 0 {
-		fmt.Fprintf(os.Stderr, "duration:     %v\n", cfg.TestDuration)
+
+	fmt.Fprint(os.Stderr, FormatConfig(cfg))
+	if cfg.LogDir != "" {
+		fmt.Fprintf(os.Stderr, "log dir:      %s\n", cfg.LogDir)
 	}
 	fmt.Fprintln(os.Stderr)
 

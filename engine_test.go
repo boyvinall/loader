@@ -202,7 +202,10 @@ func TestEngineRunSuccess(t *testing.T) {
 		MaxParallel: 5,
 		MaxCount:    5,
 	}
-	eng := NewEngine(cfg)
+	eng, err := NewEngine(cfg)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
 
 	eng.Run()
 
@@ -239,7 +242,10 @@ func TestEngineRunFailure(t *testing.T) {
 		MaxParallel: 3,
 		MaxCount:    3,
 	}
-	eng := NewEngine(cfg)
+	eng, err := NewEngine(cfg)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
 
 	eng.Run()
 
@@ -269,7 +275,10 @@ func TestEngineSnapshotRunningProcs(t *testing.T) {
 		MaxParallel: 3,
 		MaxCount:    3,
 	}
-	eng := NewEngine(cfg)
+	eng, err := NewEngine(cfg)
+	if err != nil {
+		t.Fatalf("NewEngine: %v", err)
+	}
 
 	done := make(chan struct{})
 	go func() {

@@ -45,7 +45,10 @@ var (
 // runTUI drives an Engine with a fullscreen bubbletea dashboard. Used when
 // stdout/stderr is an interactive terminal.
 func runTUI(cfg Config) error {
-	eng := NewEngine(cfg)
+	eng, err := NewEngine(cfg)
+	if err != nil {
+		return err
+	}
 
 	// bubbletea's default signal handler intercepts an external SIGINT
 	// itself and quits immediately, before Update ever sees it — bypassing
@@ -62,7 +65,7 @@ func runTUI(cfg Config) error {
 	// renderFooter), so nothing extra happens here on stage transitions.
 	eng.WatchInterrupts(sigCh, nil, nil)
 
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
 }
 
