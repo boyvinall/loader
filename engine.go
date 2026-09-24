@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -91,6 +92,10 @@ type Config struct {
 	// OutputMode controls how subprocess stdout/stderr is handled. See
 	// OutputMode's docs.
 	OutputMode OutputMode
+
+	// LogDir is the resolved directory to write per-run log files into.
+	// Empty means logging is disabled.
+	LogDir string
 }
 
 // LogLine is a single line of output emitted by a process, or a system
@@ -380,9 +385,10 @@ func (w *lineWriter) Flush() {
 // cfg.MaxCount/cfg.TestDuration, and tracking results. It is display-agnostic
 // — plain.go and tui.go both drive it the same way.
 type Engine struct {
-	cfg   Config
-	stats stats
-	stage atomic.Int32
+	cfg    Config
+	stats  stats
+	stage  atomic.Int32
+	logger *RunLogger
 
 	logCh   chan LogLine
 	dropped atomic.Int64
@@ -405,9 +411,15 @@ type Engine struct {
 // NewEngine constructs an Engine ready to Run. Cancellation plumbing is set
 // up eagerly so StopLaunching/KillRunning are safe to call as soon as
 // NewEngine returns, even before Run's goroutine has started.
-func NewEngine(cfg Config) *Engine {
+func NewEngine(cfg Config) (*Engine, error) {
+	logger, err := newRunLogger(cfg.LogDir)
+	if err != nil {
+		return nil, err
+	}
+
 	e := &Engine{
 		cfg:        cfg,
+		logger:     logger,
 		logCh:      make(chan LogLine, logChannelCapacity),
 		stoppingCh: make(chan struct{}),
 		finishedCh: make(chan struct{}),
@@ -423,7 +435,7 @@ func NewEngine(cfg Config) *Engine {
 
 	e.runCtx, e.cancelRun = context.WithCancel(context.Background())
 	e.stage.Store(int32(StageRunning))
-	return e
+	return e, nil
 }
 
 // Stage returns the engine's current lifecycle stage.
@@ -635,6 +647,12 @@ launchLoop:
 	e.setStageAtLeast(StageStopping)
 	wg.Wait()
 	e.setStageAtLeast(StageFinished)
+	if err := e.logger.WriteSummary(e.cfg, e.FinalSnapshot()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to write log summary: %v\n", err)
+	}
+	if err := e.logger.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to close run log: %v\n", err)
+	}
 	close(e.logCh)
 }
 
@@ -642,6 +660,7 @@ func (e *Engine) launchOne(n int64) {
 	start := time.Now()
 	e.stats.startRunning(n, start)
 	e.stats.recordStart(n, start)
+	e.logger.LogStart(n, start)
 	defer e.stats.stopRunning(n)
 
 	c := exec.CommandContext(e.runCtx, e.cfg.Args[0], e.cfg.Args[1:]...)
@@ -658,7 +677,7 @@ func (e *Engine) launchOne(n int64) {
 	}
 	c.WaitDelay = 5 * time.Second
 	c.Env = append(os.Environ(),
-		fmt.Sprintf("LOADER_ITERATION_ID=%d", n),
+		fmt.Sprintf("LOADER_RUN_ATTEMPT=%d", n),
 		fmt.Sprintf("LOADER_RATE=%s", e.cfg.Rate),
 		fmt.Sprintf("LOADER_MAX_PARALLEL=%d", e.cfg.MaxParallel),
 	)
@@ -678,15 +697,41 @@ func (e *Engine) launchOne(n int64) {
 		c.Stderr = io.Discard
 	}
 
+	if e.logger != nil {
+		if f, ferr := os.Create(e.logger.processLogPath(n)); ferr == nil {
+			defer func() { _ = f.Close() }()
+			c.Stdout = io.MultiWriter(c.Stdout, f)
+			c.Stderr = io.MultiWriter(c.Stderr, f)
+		} else {
+			e.emitLog(LogLine{ProcID: n, Stream: "system", Text: fmt.Sprintf("failed to create process log file: %v", ferr)})
+		}
+	}
+
 	err := c.Run()
 	if stdoutW != nil {
 		stdoutW.Flush()
 		stderrW.Flush()
 	}
-	elapsed := time.Since(start)
+	stop := time.Now()
+	elapsed := stop.Sub(start)
 	e.stats.recordCompletion(n, elapsed, err)
+	e.logger.LogStop(n, stop, exitCode(err), elapsed)
 
 	if err != nil && e.runCtx.Err() == nil {
 		e.emitLog(LogLine{ProcID: n, Stream: "system", Text: fmt.Sprintf("error after %v: %v", elapsed, err)})
 	}
+}
+
+// exitCode extracts a process's exit code from the error c.Run() returned:
+// 0 for a nil error, the child's actual code for an *exec.ExitError, or -1
+// for any other failure (e.g. the command couldn't be started at all).
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
 }

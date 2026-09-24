@@ -42,6 +42,8 @@ loader [options] COMMAND [ARGS...]
 | `--duration` | `-d` | `0` | Stop launching after this duration (0 = unlimited) |
 | `--verbose` | | off | Show stdout/stderr from each process (non-TUI mode) |
 | `--no-tui` | | off | Force plain-text output instead of the fullscreen TUI |
+| `--log-dir` | | `.loader` | Directory to write per-run log files into (gets its own timestamped subfolder); also settable via `LOADER_LOG_DIR` |
+| `--no-log` | | off | Disable writing per-run log files |
 
 At least one of `--max-count` or `--duration` must be set, otherwise the tool runs until interrupted.
 
@@ -73,9 +75,26 @@ loader -d 60s -r 0s -p 100 -- curl -s http://localhost:8080/health
 - **Ctrl-C twice** (or `q` twice) — kills all running processes and finishes immediately.
 - Subprocess stdout/stderr is discarded by default; use `--verbose` to see it.
 - Each launched process inherits the environment plus:
-  - `LOADER_ITERATION_ID` — the 0-based launch counter for this process
+  - `LOADER_RUN_ATTEMPT` — the 1-based launch counter for this process
   - `LOADER_RATE` — the configured `--rate` value
   - `LOADER_MAX_PARALLEL` — the configured `--max-parallel` value
+
+## Log files
+
+Unless `--no-log` is set, each run writes its log files to a fresh
+timestamped subfolder (e.g. `2026-09-24T15-04-21Z`, UTC) under `--log-dir`
+(default `.loader`), so repeated runs never clobber each other:
+
+- `environment.log` — the environment loader saw at startup, one `KEY=value` per line
+- `proc-N.log` — combined stdout/stderr for launched process `N` (matches `LOADER_RUN_ATTEMPT`)
+- `run.log` — one timestamped line per start/stop event, mirroring the TUI's recent-activity feed:
+
+  ```
+  2026-09-24T05:40:21.109+01:00 attempt=1 event=start
+  2026-09-24T05:40:21.117+01:00 attempt=1 event=stop exit=1 duration=8ms
+  ```
+
+- `summary.log` — the run's config followed by its final summary stats, written once the run finishes
 
 ## Interactive mode
 

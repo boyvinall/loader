@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/urfave/cli/v3"
@@ -25,6 +26,23 @@ func outputMode(interactive, verbose bool) OutputMode {
 	}
 }
 
+// logDirTimeFormat names a run's timestamped subfolder: a UTC, colon-free
+// variant of RFC3339 that stays valid on filesystems (like NTFS) where ':'
+// isn't allowed in path names.
+const logDirTimeFormat = "2006-01-02T15-04-05Z"
+
+// resolveLogDir returns the directory a run's log files should be written
+// to: override (the --log-dir flag/LOADER_LOG_DIR value, or "" to use the
+// default), with its own timestamped subfolder, so repeated runs never share
+// a directory even when --log-dir is set.
+func resolveLogDir(override string) string {
+	base := override
+	if base == "" {
+		base = ".loader"
+	}
+	return filepath.Join(base, time.Now().UTC().Format(logDirTimeFormat))
+}
+
 func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 	args := cmd.Args().Slice()
 	if len(args) == 0 {
@@ -36,6 +54,11 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 		return Config{}, fmt.Errorf("--max-parallel must be greater than 0")
 	}
 
+	var logDir string
+	if !cmd.Bool("no-log") {
+		logDir = resolveLogDir(cmd.String("log-dir"))
+	}
+
 	return Config{
 		Args:         args,
 		Rate:         cmd.Duration("rate"),
@@ -43,6 +66,7 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 		MaxCount:     int(cmd.Int("max-count")),
 		TestDuration: cmd.Duration("duration"),
 		OutputMode:   outputMode(interactive, cmd.Bool("verbose")),
+		LogDir:       logDir,
 	}, nil
 }
 
@@ -106,6 +130,15 @@ func main() {
 			&cli.BoolFlag{
 				Name:  "no-tui",
 				Usage: "force plain-text output instead of the fullscreen TUI",
+			},
+			&cli.StringFlag{
+				Name:    "log-dir",
+				Usage:   "directory to write per-run log files into (gets its own timestamped subfolder); default: .loader",
+				Sources: cli.EnvVars("LOADER_LOG_DIR"),
+			},
+			&cli.BoolFlag{
+				Name:  "no-log",
+				Usage: "disable writing per-run log files",
 			},
 		},
 		Action: run,
