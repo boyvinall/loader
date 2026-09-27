@@ -385,7 +385,7 @@ func (w *lineWriter) Flush() {
 }
 
 // Engine runs a load test: launching cfg.Args repeatedly in parallel at
-// cfg.Rate, up to cfg.MaxParallel concurrent processes, honoring
+// cfg.Rate, up to cfg.MaxParallel concurrent processes, honouring
 // cfg.MaxCount/cfg.TestDuration, and tracking results. It is display-agnostic
 // — plain.go and tui.go both drive it the same way.
 type Engine struct {
@@ -546,6 +546,15 @@ func (e *Engine) emitLog(l LogLine) {
 	default:
 		e.dropped.Add(1)
 	}
+}
+
+// Elapsed returns the time since Run started (or zero, before it has),
+// without Snapshot's cost of computing percentiles and copying state.
+func (e *Engine) Elapsed() time.Duration {
+	if e.startTime.IsZero() {
+		return 0
+	}
+	return time.Since(e.startTime)
 }
 
 // Snapshot returns a race-free, point-in-time view of the engine's state.
