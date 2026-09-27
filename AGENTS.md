@@ -29,7 +29,7 @@ root.
 Three files split cleanly along "engine vs. two interchangeable front-ends":
 
 - **[engine.go](engine.go)** — `Engine`, the display-agnostic load-test runner. Owns launching
-  processes at `Config.Rate` up to `Config.MaxParallel`, honoring `MaxCount`/`TestDuration`,
+  processes at `Config.Rate` up to `Config.MaxParallel`, honouring `MaxCount`/`TestDuration`,
   and tracking results (counts, running-process set, duration history, a bounded activity
   feed). Exposes its state via `Snapshot()` (cheap, capped-sample percentiles — safe to poll
   every UI tick) and `FinalSnapshot()` (full-history percentiles, call once after `Run()`
@@ -37,17 +37,21 @@ Three files split cleanly along "engine vs. two interchangeable front-ends":
   Finished`) driven by `StopLaunching()`/`KillRunning()` (first/second Ctrl-C) and observable
   via the `Stopping()`/`Finished()` channels. `OutputMode` (`Discard`/`Passthrough`/`Capture`)
   is decided by the caller, not the engine — see `outputMode()` in [main.go](main.go).
-- **[plain.go](plain.go)** — non-interactive driver: prints a config header, overwrites a
-  status line on stderr once a second, streams "system" log lines (process errors) as they
-  occur, and prints `FormatSummary()` on exit. Used whenever stdout/stderr isn't a real
-  terminal, or `--no-tui` is passed.
+- **[plain.go](plain.go)** — non-interactive driver: prints a config header, a status line on a
+  timer (each update on its own line, suppressed when unchanged except for a periodic
+  heartbeat), streams "system" log lines (process errors) as they occur, and prints a summary
+  on exit. Used whenever stdout/stderr isn't a real terminal, or `--non-interactive` is passed.
+  Rendering is behind the `plainReporter` interface (`plain_reporters.go`): `textReporter` is the
+  behaviour above; `jsonReporter` (selected via `-o json`) instead emits `status`/`log`/`summary`
+  events as JSON Lines on stdout and drops the header/notices, which have no place in that
+  schema.
 - **[tui.go](tui.go)** — interactive driver: a bubbletea `Model` with five panels (Status,
   Config, Latency, Running, Log) plus a recent-Activity sidebar, driven by `Engine.Snapshot()`
   on a tick and by `Engine.LogLines()` for the log panel. Panel sizing is recalculated from
   terminal dimensions in `recalcSizes()`; layout math is the trickiest part of this file if
   something looks off after a resize.
 - **[main.go](main.go)** — CLI flag definitions (`urfave/cli/v3`) and the interactive/plain
-  dispatch: `isInteractiveTerminal()` checks stdout *and* stderr are TTYs, `--no-tui` forces
+  dispatch: `isInteractiveTerminal()` checks stdout *and* stderr are TTYs, `--non-interactive` forces
   plain mode even in a terminal. `resolveLogDir()` turns `--log-dir`/`LOADER_LOG_DIR` (or the
   `.loader` default) into a fresh timestamped subfolder per run (UTC, colon-free so it's valid
   on filesystems like NTFS — see `logDirTimeFormat`); `--no-log` leaves
@@ -63,7 +67,7 @@ Three files split cleanly along "engine vs. two interchangeable front-ends":
 
 Both drivers talk to `Engine` through the same public surface (`Run`, `Snapshot`,
 `FinalSnapshot`, `LogLines`, `StopLaunching`, `KillRunning`, `Stopping`, `Finished`) — there is
-no driver-specific state inside `Engine`. When changing engine behavior, check that both
+no driver-specific state inside `Engine`. When changing engine behaviour, check that both
 `plain.go` and `tui.go` still make sense against the new semantics.
 
 Key invariants worth knowing before touching `engine.go`:

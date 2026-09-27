@@ -40,8 +40,10 @@ loader [options] COMMAND [ARGS...]
 | `--max-parallel` | `-p` | `20` | Maximum number of simultaneous processes |
 | `--max-count` | `-n` | `0` | Total processes to launch before stopping (0 = unlimited) |
 | `--duration` | `-d` | `0` | Stop launching after this duration (0 = unlimited) |
-| `--verbose` | | off | Show stdout/stderr from each process (non-TUI mode) |
-| `--no-tui` | | off | Force plain-text output instead of the fullscreen TUI |
+| `--verbose` | | off | Show stdout/stderr from each process (non-interactive mode) |
+| `--non-interactive` | | off | Force plain-text output instead of the fullscreen TUI (for CI or agentic use) |
+| `--status-interval` | | `5s` | Interval between status lines in non-interactive mode |
+| `--output` | `-o` | `plain` | Output format in non-interactive mode: `plain` or `json` (JSON Lines on stdout) |
 | `--log-dir` | | `.loader` | Directory to write per-run log files into (gets its own timestamped subfolder); also settable via `LOADER_LOG_DIR` |
 | `--no-log` | | off | Disable writing per-run log files |
 | `--log-env` | | none | Env var name to record in `environment.log` (can be specified multiple times); also settable via `LOADER_LOG_ENV_VARS` or a config file |
@@ -130,11 +132,16 @@ Once the run finishes, the dashboard stays open showing the final results — pr
 
 ## Output
 
-A live status line is printed to stderr during the run:
+A status line is printed to stderr on a timer during the run (one per line, not overwritten in
+place — so this mode's output stays readable in CI logs or piped to a file):
 
 ```
-launched=42      running=8       completed=34      failed=0
+[5s] launched=42      running=8       completed=34      failed=0
 ```
+
+A line is only printed when the counters changed since the last one, except every 6th tick, which
+is always printed so a log/agent watching for liveness still sees regular output even once nothing
+is changing (e.g. while a handful of stragglers finish).
 
 A summary is printed on exit:
 
@@ -144,11 +151,47 @@ Launched:  100
 Completed: 100
 Successes: 98
 Failures:  2
-Duration:
+Duration (OK):
   min: 142ms
   avg: 187ms
   p50: 183ms
   p95: 241ms
   p99: 267ms
   max: 312ms
+Duration (FAIL):
+  min: 95ms
+  avg: 101ms
+  p50: 101ms
+  p95: 108ms
+  p99: 108ms
+  max: 108ms
+```
+
+### JSON output (`-o json`)
+
+With `-o json`, non-interactive mode emits [JSON Lines](https://jsonlines.org/) on stdout instead
+of the text above: one self-contained JSON object per line, each with a `type` field. The config
+header and signal-handling notices ("Stopping launch loop...", "Waiting for running
+processes...") are text-only concepts with no place in that schema, so they're suppressed
+entirely — stdout is a clean stream a script or agent can parse directly.
+
+A `status` line is emitted on the same timer, and with the same change-suppression/heartbeat
+rules, as the plain status line:
+
+```json
+{"type":"status","elapsed_seconds":5.02,"launched":42,"running":8,"completed":34,"failed":0}
+```
+
+A `log` line is emitted for each process error, as it occurs (the same events the plain driver
+prints as `[procID] text`):
+
+```json
+{"type":"log","elapsed_seconds":4.31,"proc_id":37,"text":"error after 812ms: exit status 1"}
+```
+
+A single `summary` line is emitted once at the end. `duration_ok`/`duration_fail` are omitted
+when there's no data for that bucket (e.g. no failures):
+
+```json
+{"type":"summary","launched":100,"completed":100,"successes":98,"failures":2,"duration_ok":{"count":98,"min_ms":142,"avg_ms":187,"p50_ms":183,"p95_ms":241,"p99_ms":267,"max_ms":312},"duration_fail":{"count":2,"min_ms":95,"avg_ms":101,"p50_ms":101,"p95_ms":108,"p99_ms":108,"max_ms":108}}
 ```

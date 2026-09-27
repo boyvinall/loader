@@ -135,7 +135,7 @@ func isInteractiveTerminal() bool {
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
-	interactive := isInteractiveTerminal() && !cmd.Bool("no-tui")
+	interactive := isInteractiveTerminal() && !cmd.Bool("non-interactive")
 
 	cfg, err := buildConfig(cmd, interactive)
 	if err != nil {
@@ -145,7 +145,16 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	if interactive {
 		return runTUI(cfg)
 	}
-	return runPlain(cfg)
+
+	format, err := ParseOutputFormat(cmd.String("output"))
+	if err != nil {
+		return err
+	}
+	statusInterval := cmd.Duration("status-interval")
+	if statusInterval <= 0 {
+		return fmt.Errorf("--status-interval must be greater than 0")
+	}
+	return runPlain(cfg, statusInterval, format)
 }
 
 func main() {
@@ -184,8 +193,19 @@ func main() {
 				Usage: "show stdout/stderr from each process",
 			},
 			&cli.BoolFlag{
-				Name:  "no-tui",
-				Usage: "force plain-text output instead of the fullscreen TUI",
+				Name:  "non-interactive",
+				Usage: "force plain-text output instead of the fullscreen TUI (for CI or agentic use)",
+			},
+			&cli.DurationFlag{
+				Name:  "status-interval",
+				Usage: "interval between status lines in non-interactive mode",
+				Value: 5 * time.Second,
+			},
+			&cli.StringFlag{
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   `output format in non-interactive mode: "plain" or "json" (JSON Lines on stdout)`,
+				Value:   string(OutputFormatPlain),
 			},
 			&cli.StringFlag{
 				Name:    "log-dir",

@@ -54,7 +54,7 @@ func runTUI(cfg Config) error {
 	// itself and quits immediately, before Update ever sees it — bypassing
 	// StopLaunching/KillRunning and leaving already-launched processes
 	// running. Disable it and handle SIGINT ourselves instead, mirroring
-	// plain.go's two-stage Ctrl-C behavior.
+	// plain.go's two-stage Ctrl-C behaviour.
 	p := tea.NewProgram(newModel(eng, cfg), tea.WithAltScreen(), tea.WithoutSignalHandler())
 
 	sigCh := make(chan os.Signal, 2)
@@ -648,7 +648,7 @@ func (m Model) renderActivityPanel() string {
 
 	maxRows := clampInt(m.bodyHeight-panelBorderPaddingHeight, 0, len(m.snap.Recent))
 
-	// The status column is fixed-width and colored, so it's rendered
+	// The status column is fixed-width and coloured, so it's rendered
 	// separately from the rest of the row: truncateEllipsis isn't
 	// ANSI-aware, so it must never be applied to styled text, only to the
 	// plain-text prefix ahead of it. Reserving the status column's width
