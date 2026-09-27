@@ -96,6 +96,10 @@ type Config struct {
 	// LogDir is the resolved directory to write per-run log files into.
 	// Empty means logging is disabled.
 	LogDir string
+
+	// LogEnvVars is the resolved list of environment variable names to
+	// record in environment.log. Empty means none are logged.
+	LogEnvVars []string
 }
 
 // LogLine is a single line of output emitted by a process, or a system
@@ -412,7 +416,7 @@ type Engine struct {
 // up eagerly so StopLaunching/KillRunning are safe to call as soon as
 // NewEngine returns, even before Run's goroutine has started.
 func NewEngine(cfg Config) (*Engine, error) {
-	logger, err := newRunLogger(cfg.LogDir)
+	logger, err := newRunLogger(cfg.LogDir, cfg.LogEnvVars)
 	if err != nil {
 		return nil, err
 	}
