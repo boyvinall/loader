@@ -44,6 +44,7 @@ loader [options] COMMAND [ARGS...]
 | `--no-tui` | | off | Force plain-text output instead of the fullscreen TUI |
 | `--log-dir` | | `.loader` | Directory to write per-run log files into (gets its own timestamped subfolder); also settable via `LOADER_LOG_DIR` |
 | `--no-log` | | off | Disable writing per-run log files |
+| `--log-env` | | none | Env var name to record in `environment.log` (can be specified multiple times); also settable via `LOADER_LOG_ENV_VARS` or a config file |
 
 At least one of `--max-count` or `--duration` must be set, otherwise the tool runs until interrupted.
 
@@ -85,7 +86,8 @@ Unless `--no-log` is set, each run writes its log files to a fresh
 timestamped subfolder (e.g. `2026-09-24T15-04-21Z`, UTC) under `--log-dir`
 (default `.loader`), so repeated runs never clobber each other:
 
-- `environment.log` — the environment loader saw at startup, one `KEY=value` per line
+- `environment.log` — only the env vars you've chosen to record (see below), one `KEY=value`
+  per line; omitted entirely if none are configured
 - `proc-N.log` — combined stdout/stderr for launched process `N` (matches `LOADER_RUN_ATTEMPT`)
 - `run.log` — one timestamped line per start/stop event, mirroring the TUI's recent-activity feed:
 
@@ -95,6 +97,25 @@ timestamped subfolder (e.g. `2026-09-24T15-04-21Z`, UTC) under `--log-dir`
   ```
 
 - `summary.log` — the run's config followed by its final summary stats, written once the run finishes
+
+### Choosing which env vars to record
+
+Which env vars end up in `environment.log` is resolved in this order (first match wins):
+
+1. `--log-env NAME` (can be specified multiple times)
+2. `LOADER_LOG_ENV_VARS` — a comma-separated list, e.g. `LOADER_LOG_ENV_VARS=FOO,BAR`
+3. `logging.env_vars` in `~/.config/loader/config.yaml`:
+
+   ```yaml
+   logging:
+     env_vars:
+       - FOO
+       - BAR
+   ```
+
+4. none — `environment.log` is omitted
+
+Named vars that aren't actually set are silently skipped.
 
 ## Interactive mode
 

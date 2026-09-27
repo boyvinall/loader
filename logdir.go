@@ -27,9 +27,10 @@ type RunLogger struct {
 	runLog   *os.File
 }
 
-// newRunLogger creates dir and writes environment.log into it. An empty dir
-// means logging is disabled, and returns (nil, nil).
-func newRunLogger(dir string) (*RunLogger, error) {
+// newRunLogger creates dir and writes environment.log into it, containing
+// only the names listed in envVars that are actually set. An empty dir means
+// logging is disabled, and returns (nil, nil).
+func newRunLogger(dir string, envVars []string) (*RunLogger, error) {
 	if dir == "" {
 		return nil, nil
 	}
@@ -41,7 +42,7 @@ func newRunLogger(dir string) (*RunLogger, error) {
 		return nil, fmt.Errorf("create run log: %w", err)
 	}
 	l := &RunLogger{dir: dir, runLog: f}
-	if err := l.writeEnvironment(); err != nil {
+	if err := l.writeEnvironment(envVars); err != nil {
 		return nil, err
 	}
 	return l, nil
@@ -55,10 +56,22 @@ func (l *RunLogger) Dir() string {
 	return l.dir
 }
 
-func (l *RunLogger) writeEnvironment() error {
-	env := os.Environ()
-	sort.Strings(env)
-	return os.WriteFile(filepath.Join(l.dir, "environment.log"), []byte(strings.Join(env, "\n")+"\n"), 0o644)
+// writeEnvironment writes environment.log containing "NAME=value" lines for
+// each name in envVars that is set in the current process environment. Names
+// that aren't set are silently omitted. If no lines result, the file is
+// skipped entirely: no file means nothing was configured to be logged.
+func (l *RunLogger) writeEnvironment(envVars []string) error {
+	var lines []string
+	for _, name := range envVars {
+		if v, ok := os.LookupEnv(name); ok {
+			lines = append(lines, name+"="+v)
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	sort.Strings(lines)
+	return os.WriteFile(filepath.Join(l.dir, "environment.log"), []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }
 
 // processLogPath returns the path to the combined stdout/stderr file for

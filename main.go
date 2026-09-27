@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
+	"gopkg.in/yaml.v3"
 )
 
 // outputMode decides how subprocess stdout/stderr should be handled: the TUI
@@ -43,6 +45,52 @@ func resolveLogDir(override string) string {
 	return filepath.Join(base, time.Now().UTC().Format(logDirTimeFormat))
 }
 
+// logEnvVarsConfig mirrors the "logging.env_vars" section of
+// ~/.config/loader/config.yaml.
+type logEnvVarsConfig struct {
+	Logging struct {
+		EnvVars []string `yaml:"env_vars"`
+	} `yaml:"logging"`
+}
+
+// resolveLogEnvVars resolves the environment variable names to record in
+// environment.log, in order of precedence: the --log-env flag (if given at
+// all, it wins outright), else the LOADER_LOG_ENV_VARS CSV env var, else
+// ~/.config/loader/config.yaml's logging.env_vars, else none.
+func resolveLogEnvVars(flagValues []string) ([]string, error) {
+	if len(flagValues) > 0 {
+		return flagValues, nil
+	}
+
+	if csv, ok := os.LookupEnv("LOADER_LOG_ENV_VARS"); ok {
+		var names []string
+		for _, name := range strings.Split(csv, ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+		return names, nil
+	}
+
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("locate user config dir: %w", err)
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "loader", "config.yaml"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read config.yaml: %w", err)
+	}
+	var cfg logEnvVarsConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config.yaml: %w", err)
+	}
+	return cfg.Logging.EnvVars, nil
+}
+
 func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 	args := cmd.Args().Slice()
 	if len(args) == 0 {
@@ -55,8 +103,15 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 	}
 
 	var logDir string
+	var logEnvVars []string
 	if !cmd.Bool("no-log") {
 		logDir = resolveLogDir(cmd.String("log-dir"))
+
+		var err error
+		logEnvVars, err = resolveLogEnvVars(cmd.StringSlice("log-env"))
+		if err != nil {
+			return Config{}, err
+		}
 	}
 
 	return Config{
@@ -67,6 +122,7 @@ func buildConfig(cmd *cli.Command, interactive bool) (Config, error) {
 		TestDuration: cmd.Duration("duration"),
 		OutputMode:   outputMode(interactive, cmd.Bool("verbose")),
 		LogDir:       logDir,
+		LogEnvVars:   logEnvVars,
 	}, nil
 }
 
@@ -139,6 +195,10 @@ func main() {
 			&cli.BoolFlag{
 				Name:  "no-log",
 				Usage: "disable writing per-run log files",
+			},
+			&cli.StringSliceFlag{
+				Name:  "log-env",
+				Usage: "environment variable name to record in environment.log (repeatable); overrides LOADER_LOG_ENV_VARS and config.yaml",
 			},
 		},
 		Action: run,
