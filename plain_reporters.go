@@ -161,5 +161,5 @@ func writeJSONLine(v any) {
 
 	jsonStdoutMu.Lock()
 	defer jsonStdoutMu.Unlock()
-	os.Stdout.Write(data)
+	_, _ = os.Stdout.Write(data)
 }
